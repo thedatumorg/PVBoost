@@ -4,13 +4,22 @@
 
 <h2 align="center">PVBoost: Posterior-Calibrated Variance Boosting for Time-Series Anomaly Detection</h2>
 
-PVBoost takes the anomaly scores of any black-box detector and, **without labels**, (1) refines the scores and (2) selects a decision threshold.
+## Table of contents
 
-- **Score refinement by boosting.** Weak learners repeatedly fit the current score. Time steps whose predictions vary most across rounds are raised, since anomalies are harder to model than normal patterns. Because noise also produces variance, the variance is weighted by each time step's *anomaly posterior*: its probability of belonging to the anomalous component of a Gaussian mixture fitted to the current score. Refined scores sharpen the posteriors in turn, forming a posterior–variance feedback loop.
-- **Threshold from the posterior.** The final posterior proposes an anomaly rate. A fragmentation test, which checks whether the flagged time steps form contiguous segments rather than scattered points, caps it.
-- **Refinement strength.** PVBoost compares blends of the source and refined scores and keeps the one whose decisions are most temporally coherent. Strong source scores are therefore left largely intact.
+- [Overview](#overview)
+- [Installation](#installation)
+- [Quick start](#quick-start)
+  - [Main options](#main-options-pvboostconfig)
+- [Reproducing the TSB-AD experiments](#reproducing-the-tsb-ad-experiments)
+- [Repository layout](#repository-layout)
+- [Acknowledgement](#acknowledgement)
 
-On TSB-AD (530 series, nine domains) with 16 statistical, neural and foundation-model detectors, PVBoost improves average VUS-PR over the source scores by 6.9% (univariate) and 15.6% (multivariate). It also improves average F-score over 3σ thresholding of the source scores by 71.9% and 132.1%.
+## Overview
+
+Time-series anomaly detection (TSAD) is typically performed without supervision in two steps: *scoring*, which assigns each time step an anomaly score, and *thresholding*, which converts the scores into binary decisions. Prior work largely focuses on scoring and leaves thresholding to ad hoc heuristics, yet no threshold can recover an anomaly that the scores rank below normal fluctuations. This raises a key question: *given anomaly scores from a black-box detector, how can we both refine the scores and select a decision threshold without labels?*
+
+To address this question, we propose **PVBoost**, an unsupervised, model-agnostic framework that couples score refinement, i.e., correcting the scores of a fixed detector, with threshold selection. PVBoost formulates refinement as iterative boosting and uses the variance of weak-learner predictions across iterations as a label-free indicator of abnormality, since anomalies are intrinsically harder to model. Because noise also produces such variance, PVBoost weights it by each time step's *anomaly posterior*, the probability of belonging to the anomalous component of a Gaussian mixture fitted to the current scores. Refined scores in turn sharpen the posteriors, forming a posterior–variance feedback loop, and the final posteriors, checked by a test of whether flagged time steps form contiguous segments, determine the threshold.
+We perform an extensive evaluation using 16 statistical and neural detectors on an established TSAD benchmark ([TSB-AD](https://github.com/thedatumorg/TSB-AD)) comprising 530 time series across nine domains. Score refinement improves average threshold-independent VUS-PR by 6.9% and 15.6% over the original scores in the univariate and multivariate settings, respectively. Coupling refinement with threshold selection yields larger relative gains in average threshold-dependent F-score of 71.9% and 132.1%, respectively, over three-sigma thresholding of the original scores.
 
 ## Installation
 
@@ -36,7 +45,7 @@ result.anomaly_rate   # estimated anomaly rate used for the threshold
 result.a_star         # selected refinement strength (0 = source score, 1 = fully refined)
 ```
 
-`python examples/quickstart.py` runs PVBoost end to end on a synthetic series, using Isolation Forest as the source detector.
+`python examples/quickstart.py` runs PVBoost end to end on a synthetic time series, using Isolation Forest as the source detector.
 
 ### Main options (`PVBoostConfig`)
 
@@ -55,9 +64,9 @@ Pass options either as keyword arguments, `PVBoost(seed=1, refine_select=False)`
 
 ## Reproducing the TSB-AD experiments
 
-**1. Data.** Download TSB-AD-U and TSB-AD-M as described in the [TSB-AD repository](https://github.com/thedatumorg/TSB-AD). The evaluation lists are `Datasets/File_List/TSB-AD-{U,M}-Eva.csv` (350 univariate and 180 multivariate series).
+**1. Data.** Download TSB-AD-U and TSB-AD-M as described in the [TSB-AD repository](https://github.com/thedatumorg/TSB-AD). The evaluation lists are `Datasets/File_List/TSB-AD-{U,M}-Eva.csv` (350 univariate and 180 multivariate time series).
 
-**2. Source scores.** PVBoost reads one precomputed score per series from `<score_dir>/<detector>/<series>.npy`. Generate them with TSB-AD's own scripts, which use its tuned hyperparameters:
+**2. Source scores.** PVBoost reads one precomputed score per time series from `<score_dir>/<detector>/<series>.npy`. Generate them with TSB-AD's own scripts, which use its tuned hyperparameters:
 
 ```bash
 cd TSB-AD/benchmark_exp
@@ -81,7 +90,7 @@ For all 16 detectors × 3 seeds on both benchmarks, followed by the summary tabl
 TSBAD_ROOT=<TSB-AD> SCORE_ROOT=<SCORE_ROOT> JOBS=4 bash benchmark/run_all.sh
 ```
 
-`run_all.sh` expects the datasets under `<TSB-AD>/Datasets/TSB-AD-{U,M}`. Each run writes `results/TSB-AD-{U,M}/PVBoost_<detector>_seed<s>.csv`, with per-series VUS-PR, AUC-PR and the other TSB-AD metrics of the returned score. It also records `F1`, the point-wise F-score of PVBoost's own decisions, plus the estimated rate `pi_hat` and the selected strength `a_star`. `python benchmark/summarize.py --save_dir results` averages these over series and seeds per detector.
+`run_all.sh` expects the datasets under `<TSB-AD>/Datasets/TSB-AD-{U,M}`. Each run writes `results/TSB-AD-{U,M}/PVBoost_<detector>_seed<s>.csv`, with per-series VUS-PR, AUC-PR and the other TSB-AD metrics of the returned score. It also records `F1`, the point-wise F-score of PVBoost's own decisions, plus the estimated rate `pi_hat` and the selected strength `a_star`. `python benchmark/summarize.py --save_dir results` averages these over time series and seeds per detector.
 
 Results are deterministic for a given seed and device. GPU and CPU runs can differ slightly in floating point.
 
@@ -107,7 +116,3 @@ PVBoost builds on the following repositories:
 
 * [UADB](https://github.com/HangtingYe/UADB)
 * [TSB-AD](https://github.com/thedatumorg/TSB-AD) (datasets, metrics, and detector implementations)
-
-## License
-
-Apache-2.0. See [LICENSE](LICENSE).
